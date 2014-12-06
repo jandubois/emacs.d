@@ -105,8 +105,6 @@
 
 (setq paren-match-face 'bold)
 (setq paren-sexp-mode t)
-;; http://www.gnuvola.org/software/j/mic-paren/
-(load "mic-paren")
 (paren-activate)
 
 ;;; CPerl-mode
