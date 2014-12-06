@@ -12,6 +12,10 @@
  '(curchg-change-cursor-on-input-method-flag nil)
  '(indent-tabs-mode nil)
  '(ns-pop-up-frames nil)
+ '(package-archives
+   (quote
+    (("gnu" . "http://elpa.gnu.org/packages/")
+     ("melpa" . "http://melpa.milkbox.net/packages/"))))
  '(require-final-newline t)
  '(tool-bar-mode nil))
 (custom-set-faces

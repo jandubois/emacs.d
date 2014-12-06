@@ -2,6 +2,9 @@
 
 (setq inhibit-startup-message t)
 
+(setq package-enable-at-startup nil)
+(package-initialize)
+
 (load "my-buffer")
 
 ;;;;; Key redefinitions, marking mode etc.
