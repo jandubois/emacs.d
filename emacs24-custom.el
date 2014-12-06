@@ -10,6 +10,9 @@
  '(cua-mode t nil (cua-base))
  '(cua-normal-cursor-color "black")
  '(curchg-change-cursor-on-input-method-flag nil)
+ '(exec-path-from-shell-variables
+   (quote
+    ("PATH" "MANPATH" "P4CLIENT" "P4CONFIG" "P4PORT" "P4USER")))
  '(indent-tabs-mode nil)
  '(ns-pop-up-frames nil)
  '(package-archives
