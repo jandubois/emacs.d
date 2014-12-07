@@ -1,7 +1,5 @@
 ;;; -*-Emacs-Lisp-*-
 
-(setq inhibit-startup-message t)
-
 (setq package-enable-at-startup nil)
 (package-initialize)
 
@@ -103,8 +101,6 @@
                   (abbreviate-file-name (buffer-file-name))
                 "%b")))
 
-(setq paren-match-face 'bold)
-(setq paren-sexp-mode t)
 (paren-activate)
 
 ;;; CPerl-mode

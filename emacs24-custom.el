@@ -14,11 +14,14 @@
    (quote
     ("PATH" "MANPATH" "P4CLIENT" "P4CONFIG" "P4PORT" "P4USER")))
  '(indent-tabs-mode nil)
+ '(inhibit-startup-screen t)
  '(ns-pop-up-frames nil)
  '(package-archives
    (quote
     (("gnu" . "http://elpa.gnu.org/packages/")
      ("melpa" . "http://melpa.milkbox.net/packages/"))))
+ '(paren-match-face (quote bold))
+ '(paren-sexp-mode t)
  '(require-final-newline t)
  '(tool-bar-mode nil))
 (custom-set-faces
