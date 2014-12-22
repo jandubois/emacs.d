@@ -142,12 +142,6 @@
 (put 'upcase-region 'disabled nil)
 (put 'downcase-region 'disabled nil)
 
-;; go mode
-(if (getenv "GOROOT") ; XXX doesn't work because GOROOT is always defined by the shared .bash_profile
-    (progn
-      (setq load-path (cons (concat (getenv "GOROOT") "/misc/emacs") load-path))
-      (require 'go-mode-load)))
-
 ;; (setq ispell-program-name "hunspell")
 ;; (setq
 ;;  ispell-local-dictionary-alist
