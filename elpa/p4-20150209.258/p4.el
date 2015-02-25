@@ -9,7 +9,7 @@
 
 ;; Author: Gareth Rees <gdr@garethrees.org>
 ;; URL: https://github.com/gareth-rees/p4.el
-;; Version: 20141121.842
+;; Version: 20150209.258
 ;; X-Original-Version: 12.0
 
 ;;; Commentary:
@@ -191,6 +191,20 @@ Perforce server becomes stale."
 complete on all clients."
   :type '(repeat (string))
   :group 'p4)
+
+(eval-and-compile
+  ;; This is needed at compile time by p4-help-text.
+  (defcustom p4-modify-args-function #'identity
+    "Function that modifies a Perforce command line argument list.
+All calls to the Perforce executable are routed through this
+function to enable global modifications of argument vectors.  The
+function will be called with one argument, the list of command
+line arguments for Perforce (excluding the program name).  It
+should return a possibly modified command line argument list.
+This can be used to e.g. support wrapper scripts taking custom
+flags."
+    :type 'function
+    :group 'p4))
 
 (defgroup p4-faces nil "Perforce VC System Faces." :group 'p4)
 
@@ -520,7 +534,7 @@ the output, and evaluate BODY if the command completed successfully."
      (with-temp-buffer
        (cd dir)
        (when (zerop (save-excursion
-                      (call-process (p4-executable) nil t nil "set")))
+                      (p4-call-process nil t nil "set")))
          ,@body))))
 
 (put 'p4-with-set-output 'lisp-indent-function 0)
@@ -873,11 +887,13 @@ except for the final newlines."
 
 ;;; Running Perforce:
 
-(defun p4-executable ()
-  "Check if `p4-executable' is NIL, and if so, prompt the user
+(eval-and-compile
+  ;; This is needed at compile time by p4-help-text.
+  (defun p4-executable ()
+    "Check if `p4-executable' is NIL, and if so, prompt the user
 for a valid `p4-executable'."
-  (interactive)
-  (or p4-executable (call-interactively 'p4-set-p4-executable)))
+    (interactive)
+    (or p4-executable (call-interactively 'p4-set-p4-executable))))
 
 (defun p4-set-p4-executable (filename)
   "Set `p4-executable' to the argument FILENAME.
@@ -887,6 +903,57 @@ To set the executable for future sessions, customize
   (if (and (file-executable-p filename) (not (file-directory-p filename)))
       (setq p4-executable filename)
     (error "%s is not an executable file." filename)))
+
+(eval-and-compile
+  ;; This is needed at compile time by p4-help-text.
+  (defun p4-call-process (&optional infile destination display &rest args)
+    "Call Perforce synchronously in separate process.
+The program to be executed is taken from `p4-executable'; INFILE,
+DESTINATION, and DISPLAY are to be interpreted as for
+`call-process'.  The argument list ARGS is modified using
+`p4-modify-args-function'."
+    (apply #'call-process (p4-executable) infile destination display
+           (funcall p4-modify-args-function args))))
+
+(defun p4-call-process-region (start end &optional delete buffer display &rest args)
+  "Send text from START to END to a synchronous Perforce process.
+The program to be executed is taken from `p4-executable'; START,
+END, DELETE, BUFFER, and DISPLAY are to be interpreted as for
+`call-process-region'.  The argument list ARGS is modified using
+`p4-modify-args-function'."
+  (apply #'call-process-region start end (p4-executable) delete buffer display
+         (funcall p4-modify-args-function args)))
+
+(defun p4-start-process (name buffer &rest program-args)
+  "Start Perforce in a subprocess.  Return the process object for it.
+The program to be executed is taken from `p4-executable'; NAME
+and BUFFER are to be interpreted as for `start-process'.  The
+argument list PROGRAM-ARGS is modified using
+`p4-modify-args-function'."
+  (apply #'start-process name buffer (p4-executable)
+         (funcall p4-modify-args-function program-args)))
+
+(defun p4-compilation-start (args &optional mode name-function highlight-regexp)
+  "Run Perforce with arguments ARGS in a compilation buffer.
+The program to be executed is taken from `p4-executable'; MODE,
+NAME-FUNCTION, and HIGHLIGHT-REGEXP are to be interpreted as for
+`compilation-start'.  ARGS, however, is an argument vector, not a
+shell command.  It will be modified using
+`p4-modify-args-function'."
+  (apply #'compilation-start
+         (mapconcat #'shell-quote-argument
+                    (cons (p4-executable)
+                          (funcall p4-modify-args-function args))
+                    " ")
+         mode name-function highlight-regexp))
+
+(defun p4-make-comint (name &optional startfile &rest switches)
+  "Make a Comint process NAME in a buffer, running Perforce.
+The program to be executed is taken from `p4-executable';
+STARTFILE is to be interpreted as for `p4-make-comint'.  SWITCHES
+is modified using `p4-modify-args'."
+  (apply #'make-comint name (p4-executable) startfile
+         (funcall p4-modify-args-function switches)))
 
 (defun p4-make-output-buffer (buffer-name &optional mode)
   "Make a read-only buffer named BUFFER-NAME and return it.
@@ -929,8 +996,8 @@ connect to the server.")
   (with-temp-buffer
     (insert "yes\n")
     (p4-with-coding-system
-      (call-process-region (point-min) (point-max)
-                           (p4-executable) t t nil "trust" "-f"))))
+      (p4-call-process-region (point-min) (point-max)
+                              t t nil "trust" "-f"))))
 
 (defun p4-iterate-with-login (fun)
   "Call FUN in the current buffer and return its result.
@@ -971,7 +1038,7 @@ re-run the command."
   (p4-iterate-with-login
    (lambda ()
      (p4-with-coding-system
-       (apply 'call-process (p4-executable) nil t nil args)))))
+       (apply #'p4-call-process nil t nil args)))))
 
 (defun p4-refresh-callback (&optional hook)
   "Return a callback function that refreshes the status of the
@@ -1069,12 +1136,12 @@ and arguments taken from the local variable `p4-process-args'."
     (erase-buffer)
     (if p4-process-synchronous
         (p4-with-coding-system
-          (let ((status (apply 'call-process (p4-executable) nil t nil
+          (let ((status (apply #'p4-call-process nil t nil
                                p4-process-args)))
             (p4-process-finished (current-buffer) "P4"
                                  (if (zerop status) "finished\n"
                                    (format "exited with status %d\n" status)))))
-      (let ((process (apply 'start-process "P4" (current-buffer) (p4-executable)
+      (let ((process (apply #'p4-start-process "P4" (current-buffer)
                             p4-process-args)))
         (set-process-query-on-exit-flag process nil)
         (set-process-sentinel process 'p4-process-sentinel)
@@ -1147,7 +1214,7 @@ opposed to showing it in the echo area)."
                              (failure-callback
                               'p4-form-commit-failure-callback-default)
                              (mode 'p4-form-mode)
-                             (head-text 'p4-form-head-text))
+                             (head-text p4-form-head-text))
   "Maybe start a form-editing session.
 cmd is the p4 command to run \(it must take -o and output a form\).
 args is a list of arguments to pass to the p4 command.
@@ -1205,8 +1272,8 @@ standard input\). If not supplied, cmd is reused.
                    (save-restriction
                      (widen)
                      (p4-with-coding-system
-                       (apply 'call-process-region (point-min)
-                              (point-max) (p4-executable)
+                       (apply #'p4-call-process-region (point-min)
+                              (point-max)
                               nil buffer nil cmd args))))))))
            (setq mode-name "P4 Form Committed")
            (when p4-form-commit-success-callback
@@ -1322,9 +1389,8 @@ number is not known or not applicable."
           (forward-line 1))
         (erase-buffer)
         (if (and p4-executable have-buffers)
-            (let ((process (start-process "P4" (current-buffer)
-                                          p4-executable
-                                          "-s" "-x" "-" "have")))
+            (let ((process (p4-start-process "P4" (current-buffer)
+                                             "-s" "-x" "-" "have")))
               (setq p4-process-buffers have-buffers)
               (set-process-query-on-exit-flag process nil)
               (set-process-sentinel process 'p4-update-status-sentinel-2)
@@ -1360,9 +1426,8 @@ an update is running already."
           (setq default-directory
                 (with-current-buffer (car buffers)
                   (or p4-default-directory default-directory)))
-          (let ((process (start-process "P4" (current-buffer)
-                                        p4-executable
-                                        "-s" "-x" "-" "opened")))
+          (let ((process (p4-start-process "P4" (current-buffer)
+                                           "-s" "-x" "-" "opened")))
             (set-process-query-on-exit-flag process nil)
             (set-process-sentinel process 'p4-update-status-sentinel-1)
             (p4-set-process-coding-system process)
@@ -1458,6 +1523,19 @@ following, in order, until one succeeds:
       (let ((f (p4-context-single-filename)))
         (when f (list f))))))
 
+(defcustom p4-open-in-changelist nil
+  "If non-NIL, prompt for a numbered pending changelist when opening files."
+  :type 'boolean
+  :group 'p4)
+
+(defun p4-context-filenames-and-maybe-change ()
+  "Return a list of filenames based on the current context,
+preceded by \"-c\" and a changelist number if the user setting
+p4-open-in-changelist is non-NIL."
+  (append (and p4-open-in-changelist
+              (list "-c" (p4-completing-read 'change "Change: ")))
+          (p4-context-filenames-list)))
+
 (defun p4-context-single-filename-args ()
   "Return an argument list consisting of a single filename based
 on the current context, or NIL if no filename can be found in the
@@ -1487,7 +1565,7 @@ changelevel."
     (with-temp-buffer
       (if (and (stringp p4-executable)
                (file-executable-p p4-executable)
-               (zerop (call-process p4-executable nil t nil "help" cmd)))
+               (zerop (p4-call-process nil t nil "help" cmd)))
           (concat text "\n" (buffer-substring (point-min) (point-max)))
         text))))
 
@@ -1534,7 +1612,7 @@ twice in the expansion."
 
 (defp4cmd* add
   "Open a new file to add it to the depot."
-  (p4-context-filenames-list)
+  (p4-context-filenames-and-maybe-change)
   (p4-call-command cmd args :mode 'p4-basic-list-mode
                    :callback (p4-refresh-callback)))
 
@@ -1591,10 +1669,11 @@ twice in the expansion."
 #\n" p4-version)
   "Text added to top of change form.")
 
-(defp4cmd* change
+(defp4cmd p4-change (&rest args)
+  "change"
   "Create or edit a changelist description."
-  nil
-  (p4-form-command cmd args :move-to "Description:\n\t"
+  (interactive (p4-read-args* "p4 change: " "" 'change))
+  (p4-form-command "change" args :move-to "Description:\n\t"
                    :mode 'p4-change-form-mode
                    :head-text p4-change-head-text
                    :success-callback 'p4-change-success))
@@ -1620,21 +1699,18 @@ twice in the expansion."
 
 (defp4cmd* delete
   "Open an existing file for deletion from the depot."
-  (p4-context-filenames-list)
+  (p4-context-filenames-and-maybe-change)
   (when (yes-or-no-p "Really delete from depot? ")
     (p4-call-command cmd args :mode 'p4-basic-list-mode
                      :callback (p4-refresh-callback))))
-
-(defun p4-describe-internal (args)
-  (p4-call-command "describe" args :mode 'p4-diff-mode
-                   :callback 'p4-activate-diff-buffer))
 
 (defp4cmd p4-describe (&rest args)
   "describe"
   "Display a changelist description."
   (interactive (p4-read-args "p4 describe: "
                              (concat p4-default-diff-options " ")))
-  (p4-describe-internal args))
+  (p4-call-command "describe" args :mode 'p4-diff-mode
+                   :callback 'p4-activate-diff-buffer))
 
 (defp4cmd* diff
   "Display diff of client file with depot file."
@@ -1728,7 +1804,7 @@ continuation lines); show it in a pop-up window otherwise."
 
 (defp4cmd* edit
   "Open an existing file for edit."
-  (p4-context-filenames-list)
+  (p4-context-filenames-and-maybe-change)
   (p4-call-command cmd args
                    :mode 'p4-basic-list-mode
                    :pop-up-output 'p4-edit-pop-up-output-p
@@ -1771,9 +1847,8 @@ continuation lines); show it in a pop-up window otherwise."
   "Print lines matching a pattern."
   (interactive (p4-read-args "p4 grep: " '("-e  ..." . 3)))
   (p4-ensure-logged-in)
-  (compilation-start
-   (mapconcat 'shell-quote-argument
-              (append (list (p4-executable) "grep" "-n") args) " ")
+  (p4-compilation-start
+   (append (list "grep" "-n") args)
    'p4-grep-mode))
 
 (defp4cmd p4-group (&rest args)
@@ -1897,8 +1972,8 @@ continuation lines); show it in a pop-up window otherwise."
               (insert (read-passwd (format prompt (p4-current-server-port))) "\n"))
           (setq first-iteration nil)
           (p4-with-coding-system
-            (apply 'call-process-region (point-min) (point-max)
-                   (p4-executable) t t nil cmd "-a" args))
+            (apply #'p4-call-process-region (point-min) (point-max)
+                   t t nil cmd "-a" args))
           (goto-char (point-min))
           (when (re-search-forward "Enter password:.*\n" nil t)
             (replace-match ""))
@@ -2003,7 +2078,7 @@ changelist."
     (setq args (cons cmd args))
     (let ((process-environment (cons "P4PAGER=" process-environment)))
       (p4-ensure-logged-in)
-      (setq buffer (apply 'make-comint "P4 resolve" (p4-executable) nil args)))
+      (setq buffer (apply #'p4-make-comint "P4 resolve" nil args)))
     (with-selected-window (display-buffer buffer)
       (goto-char (point-max)))))
 
@@ -2257,7 +2332,7 @@ change numbers, and make the change numbers clickable."
     (save-restriction
       (narrow-to-region start end)
       (goto-char (point-min))
-      (while (re-search-forward "^\\(job[0-9]+\\) on [0-9]+/[0-9]+/[0-9]+ by \\([^ \n]+\\)" nil t)
+      (while (re-search-forward "^\\([^ \n]+\\) on [0-9]+/[0-9]+/[0-9]+ by \\([^ \n]+\\)" nil t)
         (p4-create-active-link-group 1 `(job ,(match-string-no-properties 1))
                                      "Describe job")
         (p4-create-active-link-group 2 `(user ,(match-string-no-properties 2))
@@ -2613,6 +2688,8 @@ only be used when p4 annotate is unavailable."
   query-arg            ; p4 command argument to put before the query string.
   query-prefix         ; string to prepend to the query string.
   regexp               ; regular expression matching results in p4 output.
+  group                ; group in regexp containing the completion (default 1).
+  annotation           ; group in regexp containing the annotation.
   fetch-completions-fn ; function to fetch completions from the depot.
   completion-fn        ; function to do the completion.
   arg-completion-fn)   ; function to do completion in arg list context.
@@ -2626,12 +2703,57 @@ With optional argument GROUP, return that group from each match."
         (push (match-string (or group 0)) result))
       (nreverse result))))
 
+;; Completions are generated as needed in completing-read, but there's
+;; no way for the completion function to return the annotations as
+;; well as completions. We don't want to query the depot for each
+;; annotation (that would be disastrous for performance). So the only
+;; way annotations can work at all efficiently is for the function
+;; that gets the list of completions (p4-complete) to also update this
+;; global variable (either by calling p4-output-annotations, or by
+;; getting the annotation table out of the cache).
+
+(defvar p4-completion-annotations nil
+  "Hash table mapping completion to its annotation (for the most
+recently generated set of completions), or NIL if there are no
+annotations.")
+
+(defun p4-completion-annotate (key)
+  "Return the completion annotation corresponding to KEY, or NIL if none."
+  (when p4-completion-annotations
+    (let ((annotation (gethash key p4-completion-annotations)))
+      (when annotation (concat " " annotation)))))
+
+(defun p4-output-annotations (args regexp group annotation)
+  "As p4-output-matches, but additionally update
+p4-completion-annotations so that it maps the matches for GROUP
+to the matches for ANNOTATION."
+  (p4-with-temp-buffer args
+    (let (result (ht (make-hash-table :test #'equal)))
+      (while (re-search-forward regexp nil t)
+        (let ((key (match-string group)))
+          (push key result)
+          (puthash key (match-string annotation) ht)))
+      (setq p4-completion-annotations ht)
+      (nreverse result))))
+
+(defun p4-completing-read (completion-type prompt &optional initial-input)
+  "Wrapper around completing-read."
+  (let ((completion (p4-get-completion completion-type))
+        (completion-extra-properties
+         '(:annotation-function p4-completion-annotate)))
+    (completing-read prompt
+                     (p4-completion-arg-completion-fn completion)
+                     nil nil initial-input
+                     (p4-completion-history completion))))
+
 (defun p4-fetch-change-completions (completion string)
   "Fetch pending change completions for STRING from the depot."
   (let ((client (p4-current-client)))
     (when client
-      (p4-output-matches `("changes" "-s" "pending" "-c" ,client)
-                         "^Change \\([1-9][0-9]*\\)" 1))))
+      (cons "default"
+            (p4-output-annotations `("changes" "-s" "pending" "-c" ,client)
+                                   "^Change \\([1-9][0-9]*\\) .*'\\(.*\\)'"
+                                   1 2)))))
 
 (defun p4-fetch-filespec-completions (completion string)
   "Fetch file and directory completions for STRING from the depot."
@@ -2652,17 +2774,22 @@ With optional argument GROUP, return that group from each match."
 
 (defun p4-fetch-completions (completion string)
   "Fetch possible completions for STRING from the depot and
-return them as a list."
+return them as a list. Also, update the p4-completion-annotations
+hash table."
   (let* ((cmd (p4-completion-query-cmd completion))
          (arg (p4-completion-query-arg completion))
          (prefix (p4-completion-query-prefix completion))
          (regexp (p4-completion-regexp completion))
+         (group (or (p4-completion-group completion) 1))
+         (annotation (p4-completion-annotation completion))
          (have-string (> (length string) 0))
          (args (append (if (listp cmd) cmd (list cmd))
                        (and arg have-string (list arg))
                        (and (or arg prefix) have-string
                             (list (concat prefix string "*"))))))
-    (p4-output-matches args regexp 1)))
+    (if annotation
+        (p4-output-annotations args regexp group annotation)
+      (p4-output-matches args regexp group))))
 
 (defun p4-purge-completion-cache (completion)
   "Remove stale entries from the cache for COMPLETION."
@@ -2675,16 +2802,20 @@ return them as a list."
 
 (defun p4-complete (completion string)
   "Return list of items of type COMPLETION that are possible
-completions for STRING. Use the cache if available, otherwise
-fetch them from the depot and update the cache accordingly."
+completions for STRING, and update the annotations hash table.
+Use the cache if available, otherwise fetch them from the depot
+and update the cache accordingly."
   (p4-purge-completion-cache completion)
   (let* ((cache (p4-completion-cache completion))
          (cached (assoc string cache)))
     ;; Exact cache hit?
-    (if cached (cddr cached)
+    (if cached
+        (progn
+          (setq p4-completion-annotations (fourth cached))
+          (third cached))
       ;; Any hit on a prefix (unless :cache-exact)
       (or (and (not (p4-completion-cache-exact completion))
-               (loop for (query timestamp . results) in cache
+               (loop for (query timestamp results annotations) in cache
                      for best-results = nil
                      for best-length = -1
                      for l = (length query)
@@ -2696,7 +2827,7 @@ fetch them from the depot and update the cache accordingly."
                                'p4-fetch-completions))
                  (results (funcall fetch-fn completion string))
                  (timestamp (current-time)))
-            (push (cons string (cons timestamp results))
+            (push (list string timestamp results p4-completion-annotations)
                   (p4-completion-cache completion))
             results)))))
 
@@ -2762,7 +2893,8 @@ fetch them from the depot and update the cache accordingly."
                     :history 'p4-help-history))
    (cons 'job      (p4-make-completion
                     :query-cmd "jobs" :query-arg "-e" :query-prefix "job="
-                    :regexp "\\([^ \n]*\\) on [0-9]+/"
+                    :regexp "\\([^ \n]*\\) on [0-9]+/.*\\* '\\(.*\\)'"
+                    :annotation 2
                     :history 'p4-job-history))
    (cons 'label    (p4-make-completion
                     :query-cmd "labels" :query-arg "-E"
@@ -2793,16 +2925,13 @@ is NIL, otherwise return NIL."
     (when completion (setf (p4-completion-cache completion) nil))))
 
 (defun p4-read-arg-string (prompt &optional initial-input completion-type)
-  (let* ((completion (and completion-type (p4-get-completion completion-type)))
-         (completion-fn (if completion-type
-                            (p4-completion-arg-completion-fn completion)
-                          'p4-arg-string-completion))
-         (history (if completion-type (p4-completion-history completion)
-                    'p4-arg-string-history))
-         (minibuffer-local-completion-map
+  (let* ((minibuffer-local-completion-map
           (copy-keymap minibuffer-local-completion-map)))
     (define-key minibuffer-local-completion-map " " 'self-insert-command)
-    (completing-read prompt completion-fn nil nil initial-input history)))
+    (if completion-type
+        (p4-completing-read completion-type prompt initial-input)
+      (completing-read prompt #'p4-arg-string-completion nil nil
+                       initial-input 'p4-arg-string-history))))
 
 (defun p4-read-args (prompt &optional initial-input completion-type)
   (p4-make-list-from-string
@@ -2961,11 +3090,10 @@ is NIL, otherwise return NIL."
           (action
            (when (<= rev 1)
              (error "There is no earlier revision to diff."))
-           (p4-call-command "diff2"
+           (apply #'p4-diff2
             (append (p4-make-list-from-string p4-default-diff-options)
-                    (mapcar 'p4-get-file-rev (list (1- rev) rev)))
-            :mode 'p4-diff-mode :callback 'p4-activate-diff-buffer))
-          (change (p4-describe-internal
+                    (mapcar 'p4-get-file-rev (list (1- rev) rev)))))
+          (change (apply #'p4-describe
                    (append (p4-make-list-from-string p4-default-diff-options)
                            (list (format "%d" change)))))
           (pending (p4-change (list pending)))
@@ -3137,10 +3265,7 @@ is NIL, otherwise return NIL."
 
 (defun p4-opened-list-change (change)
   (interactive 
-   (let ((completion (p4-get-completion 'change)))
-     (list (completing-read "New change: "
-                            (p4-completion-arg-completion-fn completion)
-                            nil nil "" (p4-completion-history completion)))))
+   (list (p4-completing-read 'change "New change: ")))
   (save-excursion
     (beginning-of-line)
     (when (looking-at p4-basic-list-filename-regexp)
