@@ -23,7 +23,9 @@
  '(paren-match-face (quote bold))
  '(paren-sexp-mode t)
  '(require-final-newline t)
- '(tool-bar-mode nil))
+ '(show-trailing-whitespace t)
+ '(tool-bar-mode nil)
+ '(ws-butler-global-mode t))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
