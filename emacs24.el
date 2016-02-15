@@ -75,6 +75,7 @@
 (global-set-key (read-kbd-macro "M-n")     'next-error)
 (global-set-key (read-kbd-macro "M-p")     'previous-error)
 (global-set-key (read-kbd-macro "C-x C-g") 'goto-line)
+(global-set-key (read-kbd-macro "S-SPC") 'just-one-space)
 
 ;; Make RET and C-m act as positive replace ack keys
 (define-key query-replace-map [return] 'act)
