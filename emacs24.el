@@ -124,8 +124,6 @@
 (define-key global-map "\C-x\C-j" 'dired-jump)
 (define-key global-map "\C-x4\C-j" 'dired-jump-other-window)
 
-(load-library "p4")
-
 ;; (setq backup-enable-predicate
 ;;       (lambda (name)
 ;;         (and (normal-backup-enable-predicate name)
