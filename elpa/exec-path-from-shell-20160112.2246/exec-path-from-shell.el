@@ -5,8 +5,8 @@
 ;; Author: Steve Purcell <steve@sanityinc.com>
 ;; Keywords: environment
 ;; URL: https://github.com/purcell/exec-path-from-shell
-;; Version: 20141212.846
-;; X-Original-Version: DEV
+;; Package-Version: 20160112.2246
+;; Package-X-Original-Version: 0
 
 ;; This file is not part of GNU Emacs.
 
@@ -83,6 +83,13 @@
   :type '(repeat (string :tag "Environment variable"))
   :group 'exec-path-from-shell)
 
+(defcustom exec-path-from-shell-check-startup-files t
+  "If non-nil, warn if variables are being set in the wrong shell startup files.
+Environment variables should be set in .profile or .zshenv rather than
+.bashrc or .zshrc."
+  :type 'boolean
+  :group 'exec-path-from-shell)
+
 (defvar exec-path-from-shell-debug nil
   "Display debug info when non-nil.")
 
@@ -90,16 +97,10 @@
   "Double-quote S, escaping any double-quotes already contained in it."
   (concat "\"" (replace-regexp-in-string "\"" "\\\\\"" s) "\""))
 
-(defun exec-path-from-shell--tcsh-p (shell)
-  "Return non-nil if SHELL appears to be tcsh."
-  (and shell (string-match "tcsh$" shell)))
-
-(defun exec-path-from-shell--login-arg (shell)
-  "Return the name of the --login arg for SHELL."
-  (if (exec-path-from-shell--tcsh-p shell) "-d" "-l"))
-
 (defcustom exec-path-from-shell-arguments
-  (list (exec-path-from-shell--login-arg (getenv "SHELL")) "-i")
+  (if (string-match-p "t?csh$" (getenv "SHELL"))
+      (list "-d")
+    (list "-l" "-i"))
   "Additional arguments to pass to the shell.
 
 The default value denotes an interactive login shell."
@@ -113,7 +114,7 @@ The default value denotes an interactive login shell."
 
 (defun exec-path-from-shell--standard-shell-p (shell)
   "Return non-nil iff SHELL supports the standard ${VAR-default} syntax."
-  (not (string-match "\\(fish\\|tcsh\\)$" shell)))
+  (not (string-match "\\(fish\\|t?csh\\)$" shell)))
 
 (defun exec-path-from-shell-printf (str &optional args)
   "Return the result of printing STR in the user's shell.
@@ -155,14 +156,19 @@ shell-escaped, so they may contain $ etc."
 
 Execute $SHELL according to `exec-path-from-shell-arguments'.
 The result is a list of (NAME . VALUE) pairs."
-  (let* ((dollar-names (mapcar (lambda (n) (format "${%s-}" n)) names))
+  (let* ((random-default (md5 (format "%s%s%s" (emacs-pid) (random) (current-time))))
+         (dollar-names (mapcar (lambda (n) (format "${%s-%s}" n random-default)) names))
          (values (split-string (exec-path-from-shell-printf
                                 (mapconcat #'identity (make-list (length names) "%s") "\\000")
                                 dollar-names) "\0")))
     (let (result)
       (while names
         (prog1
-            (push (cons (car names) (car values)) result)
+            (let ((value (car values)))
+              (push (cons (car names)
+                          (unless (string-equal random-default value)
+                            value))
+                    result))
           (setq values (cdr values)
                 names (cdr names))))
       result)))
@@ -190,9 +196,26 @@ variables such as `exec-path'."
 As a special case, if the variable is $PATH, then `exec-path' and
 `eshell-path-env' are also set appropriately.  The result is an alist,
 as described by `exec-path-from-shell-getenvs'."
-  (mapc (lambda (pair)
-          (exec-path-from-shell-setenv (car pair) (cdr pair)))
-        (exec-path-from-shell-getenvs names)))
+  (let ((pairs (exec-path-from-shell-getenvs names)))
+    (when exec-path-from-shell-check-startup-files
+      (exec-path-from-shell--maybe-warn-about-startup-files pairs))
+    (mapc (lambda (pair)
+            (exec-path-from-shell-setenv (car pair) (cdr pair)))
+          pairs)))
+
+(defun exec-path-from-shell--maybe-warn-about-startup-files (pairs)
+  "Warn the user if the value of PAIRS seems to depend on interactive shell startup files."
+  (let ((without-minus-i (remove "-i" exec-path-from-shell-arguments)))
+    ;; If the user is using "-i", we warn them if it is necessary.
+    (unless (eq exec-path-from-shell-arguments without-minus-i)
+      (let* ((exec-path-from-shell-arguments without-minus-i)
+             (alt-pairs (exec-path-from-shell-getenvs (mapcar 'car pairs)))
+             different)
+        (dolist (pair pairs)
+          (unless (equal pair (assoc (car pair) alt-pairs))
+            (push (car pair) different)))
+        (when different
+          (message "You appear to be setting environment variables %S in your .bashrc or .zshrc: those files are only read by interactive shells, so you should instead set environment variables in startup files like .profile, .bash_profile or .zshenv.  Refer to your shell's man page for more info.  Customize `exec-path-from-shell-arguments' to remove \"-i\" when done, or disable `exec-path-from-shell-check-startup-files' to disable this message." different))))))
 
 ;;;###autoload
 (defun exec-path-from-shell-copy-env (name)

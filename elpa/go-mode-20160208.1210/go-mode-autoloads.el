@@ -3,7 +3,7 @@
 ;;; Code:
 
 
-;;;### (autoloads nil "go-mode" "go-mode.el" (21741 18665 0 0))
+;;;### (autoloads nil "go-mode" "go-mode.el" (22210 12283 0 0))
 ;;; Generated autoloads from go-mode.el
 
 (autoload 'go-mode "go-mode" "\
@@ -28,7 +28,13 @@ The following extra functions are defined:
 - `godoc'
 - `go-import-add'
 - `go-remove-unused-imports'
+- `go-goto-arguments'
+- `go-goto-docstring'
+- `go-goto-function'
+- `go-goto-function-name'
 - `go-goto-imports'
+- `go-goto-return-values'
+- `go-goto-method-receiver'
 - `go-play-buffer' and `go-play-region'
 - `go-download-play'
 - `godef-describe' and `godef-jump'
@@ -49,7 +55,7 @@ for `find-tag':
 Please note that godef is an external dependency. You can install
 it with
 
-go get code.google.com/p/rog-go/exp/cmd/godef
+go get github.com/rogpeppe/godef
 
 
 If you're looking for even more integration with Go, namely
@@ -75,19 +81,19 @@ you save any file, kind of defeating the point of autoloading.
 \(fn)" t nil)
 
 (autoload 'godoc "go-mode" "\
-Show Go documentation for a query, much like M-x man.
+Show Go documentation for QUERY, much like M-x man.
 
 \(fn QUERY)" t nil)
 
 (autoload 'go-download-play "go-mode" "\
-Downloads a paste from the playground and inserts it in a Go
-buffer. Tries to look for a URL at point.
+Download a paste from the playground and insert it in a Go buffer.
+Tries to look for a URL at point.
 
 \(fn URL)" t nil)
 
 ;;;***
 
-;;;### (autoloads nil nil ("go-mode-pkg.el") (21741 18665 872755
+;;;### (autoloads nil nil ("go-mode-pkg.el") (22210 12283 659070
 ;;;;;;  0))
 
 ;;;***
