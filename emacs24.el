@@ -1,5 +1,10 @@
 ;;; -*-Emacs-Lisp-*-
 
+(when (eq system-type 'darwin)
+  ;; default Latin font (e.g. Consolas)
+  (set-face-attribute 'default nil :family "Consolas")
+  (set-face-attribute 'default nil :height 140))
+
 (setq package-enable-at-startup nil)
 (package-initialize)
 
