@@ -10,9 +10,7 @@
  '(cua-mode t nil (cua-base))
  '(cua-normal-cursor-color "black")
  '(curchg-change-cursor-on-input-method-flag nil)
- '(exec-path-from-shell-variables
-   (quote
-    ("PATH" "MANPATH" "P4CLIENT" "P4CONFIG" "P4PORT" "P4USER")))
+ '(exec-path-from-shell-variables (quote ("PATH" "MANPATH" "GOPATH")))
  '(indent-tabs-mode nil)
  '(inhibit-startup-screen t)
  '(ns-pop-up-frames nil)
@@ -20,6 +18,9 @@
    (quote
     (("gnu" . "http://elpa.gnu.org/packages/")
      ("melpa" . "http://melpa.milkbox.net/packages/"))))
+ '(package-selected-packages
+   (quote
+    (go-autocomplete auto-complete ws-butler visual-fill-column mic-paren markdown-mode go-mode exec-path-from-shell ag)))
  '(paren-match-face (quote bold))
  '(paren-sexp-mode t)
  '(require-final-newline t)
